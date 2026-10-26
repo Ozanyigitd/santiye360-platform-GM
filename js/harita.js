@@ -7,6 +7,16 @@ let currentMapLayerMode = 'street';
 let streetLayer, satelliteLayer;
 let activePinUnsubscribe = null; // Realtime dinleyiciyi hafızada tutmak için
 
+function haritaBildirim(mesaj, tur = 'info') {
+    if (typeof window.showToast === 'function') {
+        window.showToast(mesaj, tur);
+    } else if (tur === 'error') {
+        window.alert(mesaj);
+    } else {
+        console.info(mesaj);
+    }
+}
+
 // Örnek GeoJSON Verisi (Ankara İncek - Temsili Parseller)
 // Gerçek projede bunu TKGM WFS servisinden veya kendi veritabanından dinamik çekeceğiz.
 const ornekParselGeoJSON = {
@@ -64,23 +74,29 @@ const ornekParselGeoJSON = {
 function haritaBaslat() {
     if (myMap !== null) return; // Zaten başladıysa tekrar başlatma
 
+    if (!window.L) {
+        console.error('Harita başlatılamadı: Leaflet (L) yüklenmemiş.');
+        haritaBildirim('Harita kütüphanesi yüklenemedi. index.html içindeki Leaflet bağlantısını kontrol edin.', 'error');
+        return;
+    }
+
     const mapContainer = document.getElementById('gmCanliHaritaAlan');
     if (!mapContainer) return;
 
     // Ankara İncek Koordinatları ile başlat
-    myMap = L.map('gmCanliHaritaAlan').setView([39.845, 32.705], 15);
+    myMap = window.L.map('gmCanliHaritaAlan').setView([39.845, 32.705], 15);
 
-    streetLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    streetLayer = window.L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; OpenStreetMap, &copy; CARTO'
     });
     
-    satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    satelliteLayer = window.L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
     });
 
     streetLayer.addTo(myMap);
     
-    mapPinLayer = L.layerGroup().addTo(myMap);
+    mapPinLayer = window.L.layerGroup().addTo(myMap);
 
     // GeoJSON (Parsel) Katmanını Ekle
     cbsParselleriCiz();
@@ -90,10 +106,10 @@ function haritaBaslat() {
         const lat = e.latlng.lat;
         const lng = e.latlng.lng;
         
-        const type = document.getElementById('mapPinTip').value || 'Genel İşaret';
-        const color = document.getElementById('mapPinColor').value || '#19C7B1';
-        const title = document.getElementById('mapPinBaslik').value || 'Yeni Lokasyon';
-        const detail = document.getElementById('mapPinDetay').value || '';
+        const type = document.getElementById('mapPinTip')?.value || 'Genel İşaret';
+        const color = document.getElementById('mapPinColor')?.value || '#19C7B1';
+        const title = document.getElementById('mapPinBaslik')?.value || 'Yeni Lokasyon';
+        const detail = document.getElementById('mapPinDetay')?.value || '';
         
         haritayaPinEkleCloud(lat, lng, type, color, title, detail);
     });
@@ -135,7 +151,7 @@ function cbsParselleriCiz() {
         myMap.removeLayer(geoJsonLayer);
     }
 
-    geoJsonLayer = L.geoJSON(ornekParselGeoJSON, {
+    geoJsonLayer = window.L.geoJSON(ornekParselGeoJSON, {
         style: function (feature) {
             return {
                 color: feature.properties.renk,
@@ -168,6 +184,11 @@ async function haritayaPinEkleCloud(lat, lng, type, color, title, detail) {
         return;
     }
 
+    if (!window.firebase || typeof window.firebase.firestore !== 'function') {
+        haritaBildirim('Firebase/Firestore yüklenmedi. Firebase kurulumunu ve script sırasını kontrol edin.', 'error');
+        return;
+    }
+
     // Seçili bir şantiye odası varsa odaya, yoksa genel (public) olarak kaydet
     const roomId = window.currentSiteRoom ? window.currentSiteRoom.id : "public";
 
@@ -181,23 +202,32 @@ async function haritayaPinEkleCloud(lat, lng, type, color, title, detail) {
         roomId: roomId,
         createdBy: window.currentUser.uid,
         creatorName: window.currentUserProfile?.displayName || "Kullanıcı",
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        createdAt: window.firebase.firestore.FieldValue.serverTimestamp()
     };
 
     try {
-        await firebase.firestore().collection("map_pins").add(pinData);
-        showToast("Raptiye haritaya başarıyla kaydedildi.", "success");
+        await window.firebase.firestore().collection("map_pins").add(pinData);
+        haritaBildirim('Raptiye haritaya başarıyla kaydedildi.', 'success');
         // Formu temizle
-        document.getElementById('mapPinBaslik').value = '';
-        document.getElementById('mapPinDetay').value = '';
+        const baslikInput = document.getElementById('mapPinBaslik');
+        const detayInput = document.getElementById('mapPinDetay');
+        if (baslikInput) baslikInput.value = '';
+        if (detayInput) detayInput.value = '';
     } catch (error) {
         console.error("Pin ekleme hatası:", error);
-        showToast("Raptiye kaydedilemedi.", "error");
+        haritaBildirim('Raptiye kaydedilemedi.', 'error');
     }
 }
 
 function haritaPinleriniBuluttanDinle() {
-    if(!myMap) return;
+    if (!myMap || !mapPinLayer) return;
+
+    const fb = window.firebase;
+    if (!fb || typeof fb.firestore !== 'function') {
+        console.error('Pinler yüklenemedi: Firebase/Firestore henüz yüklenmemiş.');
+        haritaBildirim('Harita verileri yüklenemedi. Firebase bağlantısını kontrol edin.', 'error');
+        return;
+    }
 
     // Eğer daha önce bir dinleyici varsa iptal et
     if(activePinUnsubscribe) {
@@ -207,7 +237,7 @@ function haritaPinleriniBuluttanDinle() {
     const roomId = window.currentSiteRoom ? window.currentSiteRoom.id : "public";
     
     // Sadece aktif odaya ait pinleri dinle
-    const pinsQuery = firebase.firestore().collection("map_pins")
+    const pinsQuery = fb.firestore().collection("map_pins")
                         .where("roomId", "==", roomId)
                         .orderBy("createdAt", "desc");
 
@@ -238,11 +268,25 @@ function haritaPinleriniBuluttanDinle() {
     });
 }
 
+// Eski HTML butonları bu adı çağırıyor olabilir. İsim uyumluluğu için korunuyor.
+function haritaPinleriniBuluttanCek() {
+    if (!myMap) {
+        haritaBaslat(); // Harita açılmamışsa başlatır; başlatma işlemi pin dinleyicisini de kurar.
+        return;
+    }
+
+    // Harita zaten açıksa eski dinleyiciyi yenileyip aktif oda pinlerini tekrar dinle.
+    haritaPinleriniBuluttanDinle();
+    setTimeout(() => {
+        if (myMap) myMap.invalidateSize();
+    }, 100);
+}
+
 function haritadaPinCiz(id, data) {
     const markerHtml = `
         <div style="background-color: ${data.color}; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>
     `;
-    const customIcon = L.divIcon({
+    const customIcon = window.L.divIcon({
         html: markerHtml,
         className: 'custom-leaflet-marker',
         iconSize: [14, 14],
@@ -262,7 +306,7 @@ function haritadaPinCiz(id, data) {
         </div>
     `;
 
-    L.marker([data.lat, data.lng], {icon: customIcon})
+    window.L.marker([data.lat, data.lng], {icon: customIcon})
      .bindPopup(popupContent)
      .addTo(mapPinLayer);
 }
@@ -292,11 +336,25 @@ async function haritaPinSilCloud(docId) {
     if(!confirm("Bu raptiyeyi silmek istediğinize emin misiniz?")) return;
 
     try {
-        await firebase.firestore().collection("map_pins").doc(docId).delete();
-        showToast("Raptiye silindi.", "success");
+        await window.firebase.firestore().collection("map_pins").doc(docId).delete();
+        haritaBildirim('Raptiye silindi.', 'success');
         // onSnapshot dinlediği için harita ve liste otomatik güncellenecek, tekrar çekmeye gerek yok!
     } catch(error) {
         console.error("Pin silme hatası:", error);
-        showToast("Silinirken bir hata oluştu.", "error");
+        haritaBildirim('Silinirken bir hata oluştu.', 'error');
     }
 }
+
+// index.html içindeki onclick ve diğer modüllerden çağrılabilmesi için global API.
+Object.assign(window, {
+    haritaBaslat,
+    haritaUcur,
+    haritaKatmanDegistir,
+    cbsParselleriCiz,
+    haritayaPinEkleCloud,
+    haritaPinleriniBuluttanDinle,
+    haritaPinleriniBuluttanCek,
+    haritadaPinCiz,
+    listeyePinEkle,
+    haritaPinSilCloud
+});
