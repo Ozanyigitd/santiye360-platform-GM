@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ŞANTİYE360 — Gayrimenkul ve Saha Yönetim Platformu</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- PDF ve Excel Dışa Aktarma Kütüphaneleri -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col">
+
+  <!-- SAĞ ÜST CANLI BİLDİRİM KONTEYNERİ -->
+  <div id="liveToastContainer" class="fixed top-14 right-5 z-[250] space-y-2 pointer-events-none"></div>
+
+  <!-- KVKK AYDINLATMA METNİ MODALI (SÜRÜM v1.0) -->
+  <div id="kvkkModal" class="hidden fixed inset-0 z-[260] bg-black/80 flex items-center justify-center p-4">
+    <div class="max-w-lg w-full ds-card p-6 space-y-4">
+      <div class="flex justify-between items-center border-b border-[#262C36] pb-3">
+        <h3 class="text-sm font-semibold text-white">6698 Sayılı KVKK Aydınlatma Metni (Sürüm v1.0)</h3>
+        <button type="button" onclick="document.getElementById('kvkkModal').classList.add('hidden')" class="text-[#A6B0BF] hover:text-white">✕</button>
+      </div>
+      <div class="text-xs text-[#A6B0BF] space-y-2 max-h-72 overflow-y-auto pr-2 leading-relaxed">
+        <p><strong>1. Veri Sorumlusu ve Kapsam:</strong> ŞANTİYE360 platformunda işlenen ad-soyad, mesleki unvan, sicil beyanı ve proje verileri yalnızca şantiye koordinasyonu ve portföy paylaşımı amacıyla işlenmektedir.</p>
+        <p><strong>2. E-Posta Gizliliği:</strong> E-posta adresiniz veritabanı profil düğümlerinde veya anahtarlarında saklanmaz ve yayınlanmaz; yalnızca Firebase Authentication servisinde kimlik doğrulama ve şifre sıfırlama amacıyla işlenir.</p>
+        <p><strong>3. Saklama Süresi ve Haklar:</strong> Verileriniz üyeliğiniz süresince saklanır; KVKK m.11 kapsamındaki erişim, düzeltme ve silme taleplerinizi yönetim kanallarından iletebilirsiniz.</p>
+        <p><strong>4. Sicil Beyanı:</strong> Kayıt sırasında girilen TTBS/SPK/Oda sicil bilgileri kullanıcı beyanı niteliğindedir.</p>
+      </div>
+      <div class="flex justify-end">
+        <button type="button" onclick="document.getElementById('kvkkModal').classList.add('hidden')" class="ds-btn-primary">Okudum ve Anladım</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1. GERÇEK FIREBASE AUTH GİRİŞ / KAYIT EKRANI -->
+  <div id="authGateModal" class="fixed inset-0 z-[200] bg-[#101318] flex items-center justify-center p-4 overflow-y-auto">
+    <div class="max-w-sm w-full ds-card p-6 space-y-4 shadow-2xl my-auto">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-[#19C7B1] flex items-center justify-center font-bold text-sm text-[#091311]">
+          Ş360
+        </div>
+        <div>
+          <h1 class="text-sm font-semibold text-white">ŞANTİYE360 Platformu</h1>
+          <p class="text-xs text-[#A6B0BF]">Kurumsal Gayrimenkul ve Saha Yönetimi</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 bg-[#101318] p-1 rounded-lg border border-[#262C36] text-xs font-medium">
+        <button type="button" id="authTabLogin" onclick="switchAuthTab('login')" class="py-2 rounded-md bg-[#19C7B1] text-[#091311] font-semibold transition">Giriş Ekranı</button>
+        <button type="button" id="authTabRegister" onclick="switchAuthTab('register')" class="py-2 rounded-md text-[#A6B0BF] hover:text-white transition">Yeni Kayıt Aç</button>
+      </div>
+
+      <div id="authErrorBox" class="hidden bg-[#F04491]/15 border border-[#F04491]/40 text-[#F04491] text-xs p-3 rounded-lg font-medium"></div>
+      <div id="authInfoBox" class="hidden bg-[#19C7B1]/15 border border-[#19C7B1]/40 text-[#19C7B1] text-xs p-3 rounded-lg font-medium"></div>
+
+      <!-- GİRİŞ FORMU -->
+      <div id="loginFormBox" class="space-y-3">
+        <div>
+          <label class="text-xs text-[#A6B0BF] font-medium block mb-1">E-posta Adresiniz</label>
+          <input id="loginEmail" type="email" placeholder="ornek@firma.com" class="w-full ds-input" />
+        </div>
+        <div>
+          <label class="text-xs text-[#A6B0BF] font-medium block mb-1">Şifreniz</label>
+          <input id="loginPass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter') handleRealLogin()" class="w-full ds-input" />
+        </div>
+        <div class="text-right mb-2">
+          <button type="button" onclick="handleForgotPassword()" class="text-xs text-[#19C7B1] hover:underline">
+            Şifremi Unuttum?
+          </button>
+        </div>
+        <button type="button" id="btnLoginAction" onclick="handleRealLogin()" class="w-full ds-btn-primary py-2.5 mt-1">
+          Giriş Yap ve Başla
+        </button>
+        <div class="text-center pt-1">
+          <button type="button" onclick="switchAuthTab('register')" class="text-xs text-[#19C7B1] hover:underline">
+            Henüz hesabınız yok mu? Buradan yeni kayıt açın →
+          </button>
+        </div>
+      </div>
+
+      <!-- KAYIT FORMU -->
+      <div id="registerFormBox" class="hidden space-y-3">
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="text-xs text-[#A6B0BF] block mb-1">Ad Soyad / Firma</label>
+            <input id="regName" type="text" placeholder="Örn: Ozan Demir" class="w-full ds-input" />
+          </div>
+          <div>
+            <label class="text-xs text-[#A6B0BF] block mb-1">Şehir</label>
+            <select id="regCity" class="w-full ds-input">
+              <option value="Ankara">Ankara</option>
+              <option value="İstanbul">İstanbul</option>
+              <option value="İzmir">İzmir</option>
+              <option value="Antalya">Antalya</option>
+              <option value="Bursa">Bursa</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="text-xs text-[#A6B0BF] block mb-1">E-posta Adresi</label>
+            <input id="regEmail" type="email" placeholder="ozan@firma.com" class="w-full ds-input" />
+          </div>
+          <div>
+            <label class="text-xs text-[#A6B0BF] block mb-1">Şifre (En az 6 hane)</label>
+            <input id="regPass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter') handleRealRegister()" class="w-full ds-input" />
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="text-xs text-[#A6B0BF] block mb-1">Uzmanlık Rolü</label>
+            <select id="regRoleTitle" class="w-full ds-input">
+              <option value="Proje Geliştirici / Müteahhit">Proje Geliştirici</option>
+              <option value="SPK Değerleme Uzmanı">SPK Değerleme Uzmanı</option>
+              <option value="Gayrimenkul Danışmanı">Gayrimenkul Danışmanı</option>
+              <option value="Şantiye Şefi / Mimar">Şantiye Şefi / Mimar</option>
+              <option value="Yatırımcı">Yatırımcı</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-[#A6B0BF] block mb-1">Sicil / Belge Beyanı</label>
+            <input id="regCert" type="text" placeholder="Opsiyonel (TTBS-...)" class="w-full ds-input font-mono uppercase" />
+          </div>
+        </div>
+        <div class="flex items-start gap-2 text-xs text-[#A6B0BF] pt-1">
+          <input id="regKvkkCheck" type="checkbox" class="mt-1 accent-[#19C7B1] cursor-pointer" />
+          <span>
+            <button type="button" onclick="document.getElementById('kvkkModal').classList.remove('hidden')" class="text-[#19C7B1] underline font-medium">6698 sayılı KVKK aydınlatma metnini (Sürüm v1.0)</button>
+            okudum ve kabul ediyorum.
+          </span>
+        </div>
+        <button type="button" id="btnRegAction" onclick="handleRealRegister()" class="w-full ds-btn-primary py-2.5">
+          Hesabı Oluştur ve İçeri Gir
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. ANA UYGULAMA ÇERÇEVESİ -->
+  <div class="flex-1 flex overflow-hidden relative">
+
+    <div id="mobileSidebarBackdrop" onclick="toggleMobileSidebar(false)" class="hidden fixed inset-0 bg-black/60 z-30 md:hidden"></div>
+
+    <!-- SOL SIDEBAR -->
+    <aside id="appSidebar" class="fixed md:static inset-y-0 left-0 w-60 bg-[#13171D] border-r border-[#262C36] flex flex-col justify-between flex-shrink-0 z-40 transform -translate-x-full md:translate-x-0 transition-transform duration-200">
+      <div class="p-3 space-y-4 overflow-y-auto">
+        <div class="flex items-center justify-between px-2 py-1">
+          <div class="flex items-center gap-2.5">
+            <div class="w-6 h-6 rounded-md bg-[#19C7B1] text-[#091311] font-bold text-xs flex items-center justify-center">Ş</div>
+            <span class="font-semibold text-sm tracking-tight text-white">ŞANTİYE360</span>
+          </div>
+          <button type="button" onclick="toggleMobileSidebar(false)" class="md:hidden text-[#A6B0BF] hover:text-white text-xs">✕</button>
+        </div>
+
+        <div onclick="activateMainView('santiye-lobi', document.getElementById('navBtnRooms'))" class="ds-panel p-2.5 cursor-pointer hover:border-[#384150] transition flex items-center justify-between">
+          <div class="overflow-hidden">
+            <div class="text-[11px] text-[#8E98A8] uppercase font-medium">Aktif Şantiye</div>
+            <div id="activeSiteHeaderBadge" class="text-xs font-mono font-semibold text-[#A6B0BF] truncate mt-0.5">Şantiye Seçilmedi</div>
+          </div>
+          <i class="fa-solid fa-chevron-right text-[10px] text-[#8E98A8]"></i>
+        </div>
+
+        <div class="space-y-4">
+          <div>
+            <div class="px-2.5 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#8E98A8]">Platform & Ağ</div>
+            <nav class="space-y-0.5">
+              <button type="button" id="iconBtnMeydan" onclick="activateMainView('meydan', this)" class="ds-nav-item active">
+                <i class="fa-solid fa-layer-group w-4 text-center text-xs"></i>
+                <span>Portföy & İmar Akışı</span>
+              </button>
+              <button type="button" id="navBtnRooms" onclick="activateMainView('santiye-lobi', this)" class="ds-nav-item justify-between">
+                <div class="flex items-center gap-2.5">
+                  <i class="fa-solid fa-tower-broadcast w-4 text-center text-xs"></i>
+                  <span>Şantiye Odaları</span>
+                </div>
+                <span id="roomAdminPendingBadge" class="hidden text-[11px] font-mono bg-[#F04491] text-white px-1.5 py-0.2 rounded-full">0</span>
+              </button>
+              <button type="button" id="iconBtnDm" onclick="activateMainView('dm', this)" class="ds-nav-item">
+                <i class="fa-regular fa-message w-4 text-center text-xs"></i>
+                <span>Doğrudan Mesajlar (DM)</span>
+              </button>
+            </nav>
+          </div>
+
+          <div>
+            <div class="px-2.5 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#8E98A8]">Saha, Harita & Finans</div>
+            <nav class="space-y-0.5">
+              <button type="button" onclick="activateMainView('canli-harita', this)" class="ds-nav-item">
+                <i class="fa-solid fa-map-location-dot w-4 text-center text-xs"></i>
+                <span>Harita & Parsel CBS</span>
+              </button>
+              <button type="button" onclick="activateMainView('kat-maketi', this)" class="ds-nav-item">
+                <i class="fa-solid fa-building w-4 text-center text-xs"></i>
+                <span>Bağımsız Bölüm Matrisi</span>
+              </button>
+              <button type="button" onclick="activateMainView('pafta-pin', this)" class="ds-nav-item">
+                <i class="fa-solid fa-thumbtack w-4 text-center text-xs"></i>
+                <span>Pafta & Proje Denetimi</span>
+              </button>
+              <button type="button" onclick="activateMainView('depo-stok', this)" class="ds-nav-item">
+                <i class="fa-solid fa-boxes-stacked w-4 text-center text-xs"></i>
+                <span>Depo & Envanter</span>
+              </button>
+              <button type="button" onclick="activateMainView('sozlesme-senet', this)" class="ds-nav-item">
+                <i class="fa-solid fa-file-contract w-4 text-center text-xs"></i>
+                <span>Sözleşme & Vade Planı</span>
+              </button>
+              <button type="button" onclick="activateMainView('ledger', this)" class="ds-nav-item">
+                <i class="fa-solid fa-wallet w-4 text-center text-xs"></i>
+                <span>Hakediş & Puantaj</span>
+              </button>
+              <button type="button" onclick="activateMainView('weather', this)" class="ds-nav-item">
+                <i class="fa-solid fa-cloud-bolt w-4 text-center text-xs"></i>
+                <span>Beton & Hava Radarı</span>
+              </button>
+              <button type="button" onclick="activateMainView('tools', this)" class="ds-nav-item">
+                <i class="fa-solid fa-compass-drafting w-4 text-center text-xs"></i>
+                <span>Emsal & Fizibilite</span>
+              </button>
+              <button type="button" onclick="activateMainView('emergency', this)" class="ds-nav-item text-[#F04491]">
+                <i class="fa-solid fa-shield-heart w-4 text-center text-xs"></i>
+                <span>İSG Acil Durum (SOS)</span>
+              </button>
+            </nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-3 border-t border-[#262C36] bg-[#101318]/60 flex items-center justify-between gap-2">
+        <button type="button" id="iconBtnProfile" onclick="activateMainView('profilim', this)" class="flex items-center gap-2.5 overflow-hidden text-left flex-1 hover:opacity-85 transition" title="Profilimi Düzenle">
+          <img id="headerUserAvatarImg" src="" class="hidden w-7 h-7 rounded-md object-cover border border-[#262C36]" />
+          <div id="headerUserAvatarTxt" class="w-7 h-7 rounded-md bg-[#1C222B] border border-[#262C36] text-[#19C7B1] font-semibold text-xs flex items-center justify-center flex-shrink-0">
+            ÜY
+          </div>
+          <div class="overflow-hidden">
+            <div id="topUserName" class="font-medium text-xs text-white truncate">Kullanıcı</div>
+            <div id="topUserTitle" class="text-[11px] text-[#19C7B1] truncate">Profili Düzenle</div>
+          </div>
+        </button>
+        <button type="button" onclick="logoutCurrentSession()" class="p-1.5 rounded-md text-[#A6B0BF] hover:text-[#F04491] hover:bg-[#1C222B] transition" title="Oturumu Kapat">
+          <i class="fa-solid fa-power-off text-xs"></i>
+        </button>
+      </div>
+    </aside>
+
+    <!-- SAĞ ANA ÇALIŞMA ALANI -->
+    <div class="flex-1 flex flex-col overflow-hidden bg-[#101318]">
+
+      <header class="h-12 border-b border-[#262C36] px-4 md:px-6 flex items-center justify-between flex-shrink-0 bg-[#101318]">
+        <div class="flex items-center gap-3">
+          <button type="button" onclick="toggleMobileSidebar(true)" class="md:hidden ds-btn-secondary py-1.5 px-2.5">
+            <i class="fa-solid fa-bars"></i>
+          </button>
+          <h2 id="workspaceHeaderTitle" class="text-sm font-semibold text-white">Portföy ve İmar Akışı</h2>
+          <span class="hidden sm:inline text-[#262C36]">|</span>
+          <span class="hidden sm:inline text-xs text-[#A6B0BF]" id="workspaceHeaderSub">Saha raporları ve gayrimenkul talepleri</span>
+        </div>
+
+        <div class="flex items-center gap-4 text-xs">
+          <div class="hidden xl:flex items-center gap-4 font-mono text-xs text-[#A6B0BF]">
+            <div title="Canlı Kur">USD <span id="usdVal" class="text-white font-medium ml-1">...</span></div>
+            <div title="Canlı Kur">EUR <span id="eurVal" class="text-white font-medium ml-1">...</span></div>
+            <div onclick="editMarketUnitPrices()" class="cursor-pointer hover:text-white" title="Birim fiyatı güncellemek için tıklayın">
+              DEMİR (Ref): <span id="headerRebarPrice" class="text-[#19C7B1] font-medium ml-0.5">24.850 ₺/t</span>
+            </div>
+            <div onclick="editMarketUnitPrices()" class="cursor-pointer hover:text-white" title="Birim fiyatı güncellemek için tıklayın">
+              C30 BETON (Ref): <span id="headerConcretePrice" class="text-[#19C7B1] font-medium ml-0.5">2.450 ₺/m³</span>
+            </div>
+          </div>
+
+          <button type="button" onclick="openNewPostModal()" class="ds-btn-primary">
+            <i class="fa-solid fa-plus text-[10px]"></i>
+            <span>Yeni Kayıt Paylaş</span>
+          </button>
+        </div>
+      </header>
+
+      <main id="mainScrollViewport" class="flex-1 overflow-y-auto p-4 md:p-6">
+
+        <!-- 1. MODÜL: PORTFÖY & İMAR AKIŞI -->
+        <section id="tab-network" class="tab-content max-w-6xl mx-auto">
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            <div class="lg:col-span-8 space-y-4">
+              <div class="ds-card p-3 flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-1.5">
+                  <button type="button" id="filterBtnNewest" onclick="setStreamFilter('ALL')" class="px-3 py-1.5 rounded-md text-xs font-medium bg-[#1C222B] text-white border border-[#262C36]">
+                    Tüm Kayıtlar
+                  </button>
+                  <button type="button" id="filterBtnImar" onclick="setStreamFilter('IMAR')" class="px-3 py-1.5 rounded-md text-xs font-medium text-[#A6B0BF] hover:text-white">
+                    İmar Değişiklikleri
+                  </button>
+                  <button type="button" id="filterBtnFollowing" onclick="setStreamFilter('FOLLOWING')" class="px-3 py-1.5 rounded-md text-xs font-medium text-[#A6B0BF] hover:text-white">
+                    Takip Edilenler (<span id="followingCountBadge">0</span>)
+                  </button>
+                </div>
+
+                <select id="cityFilter" onchange="filterByCity(this.value)" class="ds-input py-1 px-2.5 text-xs">
+                  <option value="ALL">Tüm Şehirler</option>
+                  <option value="Ankara">Ankara</option>
+                  <option value="İstanbul">İstanbul</option>
+                  <option value="İzmir">İzmir</option>
+                </select>
+              </div>
+
+              <div id="composerBox" class="hidden ds-card p-4 space-y-3 border-[#19C7B1]/40">
+                <div class="flex justify-between items-center">
+                  <span class="text-xs font-semibold text-white">Yapılandırılmış Saha Raporu / Portföy İlanı</span>
+                  <button type="button" onclick="openNewPostModal()" class="text-xs text-[#A6B0BF] hover:text-white">Kapat</button>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <select id="postCity" class="ds-input text-xs">
+                    <option value="Ankara">Ankara</option>
+                    <option value="İstanbul">İstanbul</option>
+                    <option value="İzmir">İzmir</option>
+                    <option value="Antalya">Antalya</option>
+                  </select>
+                  <input id="postLocation" type="text" placeholder="İlçe / Ada ve Parsel (Örn: İncek 1420/5)" class="ds-input text-xs" />
+                  <select id="postType" class="ds-input text-xs">
+                    <option value="İmar Planı Notu">İmar Planı Notu</option>
+                    <option value="Kat Karşılığı Portföy">Kat Karşılığı Portföy</option>
+                    <option value="SPK & Zemin Analizi">SPK & Zemin Analizi</option>
+                    <option value="Şantiye İlerleme Raporu">Şantiye İlerleme Raporu</option>
+                  </select>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <input id="postM2" type="number" placeholder="Alan (m² - Opsiyonel)" class="ds-input font-mono text-xs" />
+                  <input id="postEmsal" type="text" placeholder="Emsal / İmar (Örn: 1.80 Konut)" class="ds-input text-xs" />
+                  <input id="postPrice" type="number" placeholder="Fiyat / Değer (₺ - Opsiyonel)" class="ds-input font-mono text-xs" />
+                </div>
+                <textarea id="postContent" rows="3" placeholder="Teknik detayları, paylaşım oranını veya saha gözleminizi yazın..." class="w-full ds-input"></textarea>
+                <div class="flex items-center justify-between pt-1">
+                  <label class="ds-btn-secondary cursor-pointer">
+                    <i class="fa-regular fa-image text-[#19C7B1]"></i>
+                    <span id="postPhotoNameLabel">Görsel Ekle</span>
+                    <input id="postPhotoInput" type="file" accept="image/*" class="hidden" onchange="previewMainPostPhoto(this)" />
+                  </label>
+                  <button type="button" onclick="addPost()" class="ds-btn-primary">Yayınla</button>
+                </div>
+                <div id="postPhotoPreviewWrap" class="hidden pt-2">
+                  <img id="postPhotoPreviewImg" src="" class="h-16 rounded-md border border-[#262C36]" />
+                </div>
+              </div>
+
+              <div class="ds-card p-2.5 flex items-center gap-2">
+                <input id="bottomQuickInput" type="text" placeholder="Hızlı parsel tespiti, talep veya saha notu paylaşın (Enter)..." onkeydown="if(event.key==='Enter') submitBottomQuickBar()" class="flex-1 bg-transparent px-2 text-xs text-white focus:outline-none" />
+                <button type="button" onclick="submitBottomQuickBar()" class="ds-btn-primary py-1.5 px-3">Paylaş</button>
+              </div>
+
+              <div id="feedContainer" class="space-y-3"></div>
+            </div>
+
+            <div class="lg:col-span-4 space-y-4">
+              <div class="ds-card p-4 space-y-3">
+                <div class="flex items-center justify-between">
+                  <h3 class="text-xs font-semibold text-white">Kayıtlı Uzman Rehberi</h3>
+                  <span class="text-xs text-[#8E98A8]">Güvenirlik Puanlı</span>
+                </div>
+                <div class="mb-4 relative">
+                  <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[#8E98A8]"></i>
+                  <input type="text" id="userSearchInput" oninput="searchUsersDirectory()" placeholder="İsim, Unvan veya Şehir ile uzman ara..." class="w-full pl-9 pr-3 py-2 bg-[#1C222B] border border-[#262C36] rounded-lg text-xs text-white focus:outline-none focus:border-[#19C7B1] transition" />
+                </div>
+                <div id="suggestedUsersBox" class="space-y-2 max-h-80 overflow-y-auto pr-1"></div>
+              </div>
+
+              <div class="ds-card p-4 space-y-3">
+                <div class="flex items-center justify-between">
+                  <h3 class="text-xs font-semibold text-white">Onaylı Şantiye Odalarınız</h3>
+                  <button type="button" onclick="activateMainView('santiye-lobi', document.getElementById('navBtnRooms'))" class="text-xs text-[#19C7B1] hover:underline">Oda Yönetimi</button>
+                </div>
+                <div id="leftMiniCardsContainer" class="space-y-2"></div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- 2. MODÜL: ADMİN ONAYLI ŞANTİYE ODALARI -->
+        <section id="tab-santiye-lobi" class="tab-content hidden max-w-5xl mx-auto space-y-5">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="ds-card p-5 space-y-3">
+              <div class="text-xs font-semibold text-white">Yeni Şantiye Odası Kur (Oda Admini Olursunuz)</div>
+              <p class="text-xs text-[#A6B0BF]">Tahmin edilemeyen 8 haneli güvenli davet kodu üretilir. Katılımlar sizin onayınıza düşer.</p>
+              <div class="flex gap-2">
+                <input id="newRoomTitleInput" type="text" placeholder="Şantiye / Proje Adı (Örn: İncek Prestij B-Blok)" class="flex-1 ds-input" />
+                <button type="button" onclick="createNewSiteRoom()" class="ds-btn-primary">Oda Kur</button>
+              </div>
+            </div>
+
+            <div class="ds-card p-5 space-y-3">
+              <div class="text-xs font-semibold text-white">Şantiye Kodu ile Katılım İsteği Gönder</div>
+              <p class="text-xs text-[#A6B0BF]">Oda kodunu girdiğinizde talebiniz şantiye yöneticisinin onay listesine kaydedilir.</p>
+              <div class="flex gap-2">
+                <input id="lobbyJoinCodeInput" type="text" placeholder="Oda Kodu (Örn: GM-7F9K-24X)" class="flex-1 ds-input font-mono uppercase" />
+                <button type="button" onclick="requestJoinSiteRoom(document.getElementById('lobbyJoinCodeInput').value)" class="ds-btn-secondary">Katılım İsteği Gönder</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="roomStatusBanner" class="hidden ds-card p-4 border-[#19C7B1]/40 text-xs text-white"></div>
+
+          <div id="roomAdminControlPanel" class="hidden ds-card p-5 border-[#19C7B1]/40 space-y-4">
+            <div class="flex items-center justify-between border-b border-[#262C36] pb-3">
+              <div>
+                <span class="ds-badge">ŞANTİYE ADMİN PANELİ</span>
+                <h4 class="text-xs font-semibold text-white mt-1">Katılım Onayları ve Oda Üyeleri Yönetimi</h4>
+              </div>
+              <span class="text-xs text-[#8E98A8]">Mesajları silme ve üye çıkarma yetkiniz aktif</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <div class="text-xs font-medium text-[#F04491] mb-2">Onay Bekleyen Katılım İstekleri</div>
+                <div id="adminPendingList" class="space-y-2"></div>
+              </div>
+              <div>
+                <div class="text-xs font-medium text-[#19C7B1] mb-2">Odadaki Onaylı Üyeler (Çıkar)</div>
+                <div id="adminMembersList" class="space-y-2"></div>
+              </div>
+            </div>
+          </div>
+
+          <div id="activeRoomChatWrapper" class="hidden ds-card p-5 space-y-4">
+            <div class="flex flex-wrap justify-between items-center gap-2 pb-3 border-b border-[#262C36]">
+              <div class="flex items-center gap-2.5">
+                <span id="roomBadgeTitle" class="ds-badge font-mono">#ODAKODU</span>
+                <h3 id="activeRoomProjectName" class="font-semibold text-sm text-white">Şantiye Odası</h3>
+                <span id="roomAdminLabel" class="text-xs text-[#A6B0BF]"></span>
+              </div>
+              <button type="button" onclick="copyRoomInviteCode()" class="ds-btn-secondary">
+                <i class="fa-regular fa-copy text-xs"></i>
+                <span>Kodu Kopyala</span>
+              </button>
+            </div>
+
+            <div id="chatBox" class="h-80 overflow-y-auto space-y-2.5 pr-1"></div>
+
+            <div id="chatInputArea" class="flex gap-2 pt-2 border-t border-[#262C36]">
+              <input id="msgTag" type="text" list="sahaEtiketListesi" value="Saha Talimatı" placeholder="Etiket yazın/seçin..." class="ds-input text-xs w-44" />
+              <datalist id="sahaEtiketListesi">
+                <option value="Saha Talimatı"></option>
+                <option value="Çelik & Konstrüksiyon"></option>
+                <option value="Malzeme & Sevkiyat"></option>
+                <option value="Teknik Revizyon"></option>
+                <option value="Hakediş Onayı"></option>
+              </datalist>
+              <input id="chatInput" type="text" placeholder="Şantiye odasına mesaj yazın (Enter)..." onkeydown="if(event.key==='Enter') sendMessage()" class="flex-1 ds-input" />
+              <button type="button" onclick="sendMessage()" class="ds-btn-primary">Gönder</button>
+            </div>
+          </div>
+
+          <div id="noRoomSelectedBox" class="ds-card p-10 text-center space-y-2">
+            <i class="fa-solid fa-tower-broadcast text-2xl text-[#8E98A8]"></i>
+            <div class="text-sm font-semibold text-white">Henüz Bir Şantiye Odasına Bağlı Değilsiniz</div>
+            <p class="text-xs text-[#A6B0BF] max-w-md mx-auto">Yukarıdan yeni bir şantiye odası kurabilir veya mevcut bir şantiyenin davet kodunu girerek şantiye yöneticisine katılım isteği gönderebilirsiniz.</p>
+          </div>
+        </section>
+
+        <!-- 3. MODÜL: DOĞRUDAN MESAJLAR (DM & PROFİL ARAMA) -->
+        <section id="tab-ozel-mesaj-dm" class="tab-content hidden max-w-6xl mx-auto">
+          <div class="ds-card p-5">
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+              <div class="md:col-span-4 ds-panel p-3.5 space-y-3">
+                <div class="text-xs font-semibold text-white">Uzman ve Profil Ara</div>
+                <div class="relative">
+                  <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-[#8E98A8] text-xs"></i>
+                  <input id="dmProfileSearchInput" oninput="dmKisileriListele()" type="text" placeholder="İsim, şehir veya uzmanlık ara..." class="w-full ds-input pl-8 py-1.5 text-xs" />
+                </div>
+                <div id="dmKisiListesi" class="space-y-1.5 max-h-80 overflow-y-auto pr-1"></div>
+              </div>
+
+              <div class="md:col-span-8 ds-panel p-4 flex flex-col justify-between">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#262C36] pb-3 mb-3">
+                  <div class="flex items-center gap-2.5">
+                    <span id="dmAktifKisiBaslik" class="text-white font-semibold text-sm">Kişi Seçiniz</span>
+                    <span id="dmAktifKisiTrust" class="ds-badge font-mono">Güvenirlik</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button type="button" onclick="openProfileModalByKey(window.seciliDmUserKey)" class="ds-btn-secondary py-1 px-2.5 text-xs">
+                      ★ Güvenirlik Puanla / Profil
+                    </button>
+                  </div>
+                </div>
+
+                <div id="dmSohbetKutusu" class="h-72 overflow-y-auto space-y-2.5 mb-3 pr-1"></div>
+
+                <div class="flex gap-2">
+                  <input id="dmMesajInput" type="text" placeholder="Mesajınızı yazın (Enter)..." onkeydown="if(event.key==='Enter') dmMesajGonder()" class="flex-1 ds-input" />
+                  <button type="button" onclick="dmMesajGonder()" class="ds-btn-primary">Gönder</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. MODÜL: HARİTA & PARSEL CBS -->
+        <section id="tab-canli-harita" class="tab-content hidden max-w-6xl mx-auto space-y-5">
+          <div class="ds-card p-4 space-y-4">
+            <div class="flex flex-wrap justify-between items-center gap-3">
+              <div class="flex items-center gap-2">
+                <button type="button" onclick="haritaUcur(39.845, 32.705, 14)" class="ds-btn-secondary">Ankara · İncek</button>
+                <button type="button" onclick="haritaUcur(40.993, 29.052, 14)" class="ds-btn-secondary">İstanbul · Fikirtepe</button>
+                <button type="button" onclick="haritaUcur(38.318, 26.768, 13)" class="ds-btn-secondary">İzmir · Urla</button>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-[#A6B0BF]">Bilgileri girip haritada istediğiniz noktaya tıklayın</span>
+                <button type="button" onclick="haritaKatmanDegistir()" id="haritaKatmanBtn" class="ds-btn-primary">Uydu Görünümü</button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+              <div>
+                <input id="mapPinTip" type="text" list="haritaKategoriListesi" value="Kat Karşılığı Arsa" placeholder="Özel Kategori Yazın..." class="w-full ds-input text-xs" />
+                <datalist id="haritaKategoriListesi">
+                  <option value="Kat Karşılığı Arsa"></option>
+                  <option value="Aktif Şantiye Sahası"></option>
+                  <option value="Kelepir Yatırımlık Parsel"></option>
+                  <option value="Ticari İmarlı Arsa"></option>
+                  <option value="Zemin / İmar Sorunlu Alan"></option>
+                </datalist>
+              </div>
+              <select id="mapPinColor" class="ds-input text-xs">
+                <option value="#19C7B1">Turkuaz Raptiye</option>
+                <option value="#F04491">Kırmızı / Pembe Raptiye</option>
+                <option value="#F59E0B">Altın Sarısı Raptiye</option>
+                <option value="#8B5CF6">Mor Raptiye</option>
+                <option value="#3B82F6">Mavi Raptiye</option>
+              </select>
+              <input id="mapPinBaslik" type="text" placeholder="Ada / Parsel / Başlık (Örn: 1420 Ada 5 Parsel)" class="ds-input text-xs" />
+              <input id="mapPinDetay" type="text" placeholder="Açıklama (Örn: 2.500 m² · Emsal 1.80)" class="ds-input text-xs" />
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+              <div class="lg:col-span-8 rounded-lg overflow-hidden border border-[#262C36] bg-[#101318]" style="height: 480px;">
+                <div id="gmCanliHaritaAlan" class="w-full h-full z-10"></div>
+              </div>
+              <div class="lg:col-span-4 ds-panel p-4 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs font-semibold text-white">İşaretlenen Raptiyeler (Sil / Git)</span>
+                    <button type="button" onclick="haritaPinleriniBuluttanCek()" class="text-xs text-[#19C7B1] hover:underline">Yenile</button>
+                  </div>
+                  <div id="haritaPinListesiKutu" class="space-y-2 max-h-96 overflow-y-auto pr-1"></div>
+                </div>
+                <div class="text-xs text-[#8E98A8] pt-3 border-t border-[#262C36]">
+                  Her raptiyeyi çöp kutusu ikonundan veya harita balonundan silebilirsiniz.
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5. MODÜL: BAĞIMSIZ BÖLÜM MATRİSİ -->
+        <section id="tab-kat-maketi" class="tab-content hidden max-w-6xl mx-auto space-y-5">
+          <div class="ds-card p-5 space-y-5">
+            <div class="ds-panel p-4 space-y-3">
+              <div class="flex flex-wrap justify-between items-center gap-2">
+                <span class="text-xs font-semibold text-white">Bina Mimari Yapılandırıcı (Kat, Daire ve Cephe Özelleştirme)</span>
+                <span class="text-xs text-[#A6B0BF]">Projenizin gerçek kat ve daire sayısını girip oluşturun</span>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5 items-end">
+                <div>
+                  <label class="text-xs text-[#A6B0BF] block mb-1">Toplam Kat Sayısı</label>
+                  <input id="binaKatSayisiInput" type="number" min="1" max="30" value="5" class="w-full ds-input font-mono text-xs" />
+                </div>
+                <div>
+                  <label class="text-xs text-[#A6B0BF] block mb-1">Her Katta Daire Sayısı</label>
+                  <input id="binaKattaDaireInput" type="number" min="1" max="12" value="4" class="w-full ds-input font-mono text-xs" />
+                </div>
+                <div>
+                  <label class="text-xs text-[#A6B0BF] block mb-1">Zemin / Bahçe Özelliği</label>
+                  <select id="binaZeminTipiInput" class="w-full ds-input text-xs">
+                    <option value="Standard">1. Kat: Bahçe Katı + Bina Girişi</option>
+                    <option value="Ticari">1. Kat: Cadde Dükkan / Ticari + Giriş</option>
+                    <option value="Normal">Standart Konut Katı</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs text-[#A6B0BF] block mb-1">Bina Giriş Cephesi</label>
+                  <select id="binaGirisYonuInput" class="w-full ds-input text-xs">
+                    <option value="Güney (Ön Cadde)">Güney (Ön Cadde Girişi)</option>
+                    <option value="Kuzey (Bulvar)">Kuzey (Bulvar Girişi)</option>
+                    <option value="Doğu (Park Cephe)">Doğu (Park Cephe)</option>
+                  </select>
+                </div>
+                <button type="button" onclick="binaSifirdanOlustur()" class="ds-btn-primary py-2">Bina Planını Oluştur</button>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-[#262C36] pb-3">
+              <div class="flex flex-wrap items-center gap-1.5">
+                <button type="button" onclick="setBinaCepheFiltre('ALL')" id="cepheBtn_ALL" class="px-3 py-1.5 rounded-md text-xs font-semibold bg-[#19C7B1] text-[#091311]">Tüm Bina Görünümü</button>
+                <button type="button" onclick="setBinaCepheFiltre('ON')" id="cepheBtn_ON" class="px-3 py-1.5 rounded-md text-xs font-medium bg-[#1C222B] text-[#A6B0BF] hover:text-white">Ön Cephe (Giriş / Cadde)</button>
+                <button type="button" onclick="setBinaCepheFiltre('ARKA')" id="cepheBtn_ARKA" class="px-3 py-1.5 rounded-md text-xs font-medium bg-[#1C222B] text-[#A6B0BF] hover:text-white">Arka Cephe (Bahçe / Peyzaj)</button>
+                <button type="button" onclick="setBinaCepheFiltre('YAN')" id="cepheBtn_YAN" class="px-3 py-1.5 rounded-md text-xs font-medium bg-[#1C222B] text-[#A6B0BF] hover:text-white">Sol & Sağ Yan Cepheler</button>
+              </div>
+
+              <div class="flex gap-3 text-xs text-[#A6B0BF]">
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#19C7B1]"></span> Satışta</span>
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span> Opsiyon</span>
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#F04491]"></span> Satıldı</span>
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span> Arsa Sahibi</span>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              <div class="lg:col-span-8 space-y-2.5">
+                <div class="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-center text-xs text-emerald-300 font-medium">
+                  🌳 ARKA CEPHE — PEYZAJ VE ÖZEL BAHÇE KULLANIM ALANI
+                </div>
+
+                <div id="binaKatIzgarasi" class="space-y-2 max-h-[460px] overflow-y-auto pr-1"></div>
+
+                <div id="binaGirisAltBar" class="p-3 rounded-lg bg-[#1C222B] border border-[#19C7B1]/40 flex items-center justify-between text-xs">
+                  <span class="text-[#A6B0BF]">🚗 Otopark Rampası (Sol Yan)</span>
+                  <span class="font-bold text-[#19C7B1]">🚪 BİNA ANA GİRİŞ KAPISI (ÖN CEPHE)</span>
+                  <span class="text-[#A6B0BF]">🌳 Bahçe Yaya Girişi (Sağ Yan)</span>
+                </div>
+              </div>
+
+              <div class="lg:col-span-4 ds-panel p-4 flex flex-col justify-between space-y-4">
+                <div class="space-y-2.5">
+                  <div class="text-xs font-mono text-[#19C7B1]">SEÇİLİ BAĞIMSIZ BÖLÜM DÜZENLE</div>
+                  <h3 id="maketSeciliBaslik" class="text-base font-semibold text-white">Bağımsız Bölüm</h3>
+
+                  <div class="space-y-2 pt-2 border-t border-[#262C36]">
+                    <div>
+                      <label class="text-xs text-[#A6B0BF] block mb-1">Cephe ve Konum Yönü</label>
+                      <select id="maketCepheSelect" class="w-full ds-input text-xs">
+                        <option value="Ön Cephe (Giriş Yönü)">Ön Cephe (Giriş / Cadde Yönü)</option>
+                        <option value="Arka Cephe (Bahçe Yönü)">Arka Cephe (Bahçe / Peyzaj Yönü)</option>
+                        <option value="Sol Yan & Ön Köşe">Sol Yan & Ön Köşe Cephe</option>
+                        <option value="Sağ Yan & Arka Köşe">Sağ Yan & Arka Köşe Cephe</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="text-xs text-[#A6B0BF] block mb-1">Bölüm Tipi & Metrekare</label>
+                      <input id="maketTipInput" type="text" placeholder="3+1 · 140 m²" class="w-full ds-input text-xs" />
+                    </div>
+                    <div>
+                      <label class="text-xs text-[#A6B0BF] block mb-1">Liste Fiyatı (₺)</label>
+                      <input id="maketFiyatInput" type="number" class="w-full ds-input font-mono text-xs" />
+                    </div>
+                    <div>
+                      <label class="text-xs text-[#A6B0BF] block mb-1">Alıcı / Hissedar / Özel Not</label>
+                      <input id="maketMusteriInput" type="text" placeholder="Müşteri adı veya özel şerefiye notu" class="w-full ds-input text-xs" />
+                    </div>
+                    <div>
+                      <label class="text-xs text-[#A6B0BF] block mb-1">Satış Statüsü</label>
+                      <select id="maketDurumSelect" class="w-full ds-input text-xs">
+                        <option value="satilik">Satışa Açık</option>
+                        <option value="kapora">Opsiyonlu (Kapora Alındı)</option>
+                        <option value="satildi">Satıldı</option>
+                        <option value="arsa">Arsa Sahibi Payı</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <button type="button" onclick="maketDaireKaydet()" class="w-full ds-btn-primary py-2.5">Bölüm Bilgilerini Kaydet</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 6. MODÜL: PAFTA & PROJE DENETİMİ -->
+        <section id="tab-pafta-pin" class="tab-content hidden max-w-6xl mx-auto space-y-5">
+          <div class="ds-card p-5 space-y-4">
+            <div class="flex flex-wrap justify-between items-center gap-2">
+              <input id="paftaPinNotInput" type="text" placeholder="Revizyon notunu yazın ve görsel üzerinde ilgili noktaya tıklayın..." class="flex-1 ds-input" />
+              <label class="ds-btn-secondary cursor-pointer">
+                <i class="fa-solid fa-upload text-xs"></i>
+                <span>Pafta Görseli Yükle</span>
+                <input type="file" accept="image/*" class="hidden" onchange="paftaGorselYukle(this)" />
+              </label>
+              <button type="button" onclick="paftaPinleriTemizle()" class="ds-btn-secondary">Tümünü Temizle</button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+              <div class="lg:col-span-8 relative rounded-lg overflow-hidden border border-[#262C36] bg-[#101318] cursor-crosshair" id="paftaCanvasContainer" onclick="paftayaTiklaPinEkle(event)">
+                <img id="paftaAnaGorsel" src="https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1000&q=80" class="w-full h-80 object-cover opacity-85 pointer-events-none" />
+                <div id="paftaPinKatmani" class="absolute inset-0 pointer-events-none"></div>
+              </div>
+              <div class="lg:col-span-4 ds-panel p-4 space-y-2 max-h-80 overflow-y-auto" id="paftaPinListesi"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 7. MODÜL: DEPO & ENVANTER YÖNETİMİ -->
+        <section id="tab-depo-stok" class="tab-content hidden max-w-6xl mx-auto space-y-5">
+          <div class="ds-card p-5 space-y-5">
+            <div class="ds-panel p-4 space-y-3">
+              <div class="flex items-center justify-between">
+    <div class="text-xs font-semibold text-white">Envantere Yeni Malzeme / Mamul Kalemi Ekle</div>
+    <button type="button" onclick="exportStokToExcel()" class="ds-btn-secondary border-[#19C7B1] text-[#19C7B1]">
+        <i class="fa-solid fa-file-excel mr-1"></i> Excel'e Aktar
+    </button>
+</div>
+              <div class="grid grid-cols-1 sm:grid-cols-5 gap-2.5">
+                <input id="yeniStokAd" type="text" placeholder="Malzeme Adı (Örn: HEA 200 Çelik Profil)" class="sm:col-span-2 ds-input text-xs" />
+                <input id="yeniStokMiktar" type="number" placeholder="Başlangıç Miktarı" class="ds-input font-mono text-xs" />
+                <input id="yeniStokBirim" type="text" list="stokBirimOneri" placeholder="Birim (Ton, Adet, m²...)" class="ds-input text-xs" />
+                <datalist id="stokBirimOneri">
+                  <option value="Ton"></option>
+                  <option value="Adet"></option>
+                  <option value="m²"></option>
+                  <option value="m³"></option>
+                  <option value="Torba"></option>
+                  <option value="Palet"></option>
+                  <option value="Kg"></option>
+                  <option value="Metre"></option>
+                </datalist>
+                <button type="button" onclick="yeniEnvanterKalemiEkle()" class="ds-btn-primary">Envantere Ekle</button>
+              </div>
+            </div>
+
+            <div id="stokListesi" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+          </div>
+        </section>
+
+        <!-- 8. MODÜL: SÖZLEŞME & FAİZLİ VADE PLANI -->
+        <section id="tab-sozlesme-senet" class="tab-content hidden max-w-6xl mx-auto space-y-5">
+          <div class="ds-card p-5 space-y-5">
+            <div class="grid grid-cols-1 sm:grid-cols-5 gap-3">
+              <div><label class="text-xs text-[#A6B0BF] block mb-1">Alıcı Ad Soyad</label><input id="sozMusteri" type="text" value="Ahmet Yılmaz" class="w-full ds-input text-xs" /></div>
+              <div><label class="text-xs text-[#A6B0BF] block mb-1">Satış Bedeli (₺)</label><input id="sozToplam" type="number" value="5500000" oninput="hesaplaTaksitPlani()" class="w-full ds-input font-mono text-xs" /></div>
+              <div><label class="text-xs text-[#A6B0BF] block mb-1">Peşinat Tutarı (₺)</label><input id="sozPesinat" type="number" value="2500000" oninput="hesaplaTaksitPlani()" class="w-full ds-input font-mono text-xs" /></div>
+              <div><label class="text-xs text-[#A6B0BF] block mb-1">Taksit Vadesi (Ay)</label><input id="sozVade" type="number" min="1" max="120" value="12" oninput="hesaplaTaksitPlani()" class="w-full ds-input font-mono text-xs" /></div>
+              <div><label class="text-xs text-[#19C7B1] font-medium block mb-1">Aylık Faiz / Vade Farkı (%)</label><input id="sozFaizOrani" type="number" step="0.1" min="0" value="1.8" oninput="hesaplaTaksitPlani()" class="w-full ds-input font-mono text-xs border-[#19C7B1]/50" /></div>
+            </div>
+
+            <div class="ds-panel p-4 flex flex-wrap items-center justify-between gap-3">
+              <div class="flex flex-wrap gap-5 text-xs">
+                <div><span class="text-[#A6B0BF]">Kalan Anapara:</span> <strong id="sozKalanBorc" class="text-white font-mono ml-1">0 ₺</strong></div>
+                <div><span class="text-[#A6B0BF]">Toplam Faiz / Vade Farkı:</span> <strong id="sozToplamFaiz" class="text-amber-400 font-mono ml-1">0 ₺</strong></div>
+                <div><span class="text-[#A6B0BF]">Faizli Genel Toplam:</span> <strong id="sozGenelToplam" class="text-white font-mono ml-1">0 ₺</strong></div>
+                <div><span class="text-[#A6B0BF]">Aylık Senet:</span> <strong id="sozAylikTaksit" class="text-[#19C7B1] font-mono ml-1">0 ₺</strong></div>
+              </div>
+              <button type="button" onclick="yazdirResmiSozlesme()" class="ds-btn-primary">Ödeme Planını Yazdır (PDF)</button>
+            </div>
+
+            <div class="text-xs text-[#A6B0BF]">Herhangi bir taksit kutusunun üzerine tıklayarak o ayın senet tutarını özel olarak revize edebilirsiniz:</div>
+            <div id="sozTaksitTablosu" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2.5 text-xs"></div>
+          </div>
+        </section>
+
+        <!-- 9. MODÜL: PROFİLİM VE KURUMSAL KİMLİK DÜZENLEME -->
+        <section id="tab-profilim" class="tab-content hidden max-w-3xl mx-auto">
+          <div class="ds-card overflow-hidden">
+            <div class="h-28 bg-[#1C222B] border-b border-[#262C36] relative">
+              <img id="myProfileCoverImg" src="" class="hidden w-full h-full object-cover" />
+              <label class="absolute bottom-3 right-4 ds-btn-secondary cursor-pointer bg-[#101318]/90">
+                <i class="fa-regular fa-image text-xs"></i>
+                <span>Kapak Görseli Seç</span>
+                <input type="file" accept="image/*" class="hidden" onchange="uploadMyCoverPhoto(this)" />
+              </label>
+            </div>
+
+            <div class="p-6">
+              <div class="flex justify-between items-end -mt-12 mb-5">
+                <div class="relative group">
+                  <img id="myProfileAvatarImg" src="" class="hidden w-20 h-20 rounded-xl object-cover border-2 border-[#101318] bg-[#161B22]" />
+                  <div id="myProfileAvatarTxt" class="w-20 h-20 rounded-xl bg-[#1C222B] border-2 border-[#262C36] flex items-center justify-center font-bold text-xl text-[#19C7B1]">
+                    ÜY
+                  </div>
+                  <label class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 rounded-xl flex items-center justify-center text-white text-xs font-medium cursor-pointer transition">
+                    Fotoğraf Seç
+                    <input type="file" accept="image/*" class="hidden" onchange="uploadMyAvatarPhoto(this)" />
+                  </label>
+                </div>
+                <div class="flex items-center gap-3">
+                  <div id="myTrustScoreBadge" class="ds-badge">Yeni Profil</div>
+                  <button type="button" onclick="saveMyProfileChanges()" class="ds-btn-primary">
+                    Profilimi Güncelle
+                  </button>
+                </div>
+              </div>
+
+              <div id="profileSaveAlert" class="hidden mb-4 p-3 rounded-lg bg-[#19C7B1]/10 border border-[#19C7B1]/30 text-[#19C7B1] text-xs font-medium">
+                Profil bilgileriniz başarıyla kaydedildi.
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="text-xs text-[#A6B0BF] block mb-1">Ad Soyad / Firma Adı</label>
+                  <input id="editProfName" type="text" class="w-full ds-input" />
+                </div>
+                <div>
+                  <label class="text-xs text-[#A6B0BF] block mb-1">Unvan / Uzmanlık Rolü (Serbest Yazılabilir)</label>
+                  <input id="editProfTitle" type="text" list="uzmanlikUnvanListesi" class="w-full ds-input" />
+                  <datalist id="uzmanlikUnvanListesi">
+                    <option value="Proje Geliştirici / Müteahhit"></option>
+                    <option value="SPK Lisanslı Değerleme Uzmanı"></option>
+                    <option value="TTBS Yetkili Gayrimenkul Broker"></option>
+                    <option value="Şantiye Şefi / Yüksek Mimar"></option>
+                    <option value="Çelik & Statik Proje Uzmanı"></option>
+                  </datalist>
+                </div>
+                <div>
+                  <label class="text-xs text-[#A6B0BF] block mb-1">Yetki Belgesi / Oda Sicil Beyanı</label>
+                  <input id="editProfCert" type="text" class="w-full ds-input font-mono uppercase" />
+                </div>
+                <div>
+                  <label class="text-xs text-[#A6B0BF] block mb-1">Bölge / Şehir</label>
+                  <input id="editProfCity" type="text" class="w-full ds-input" />
+                </div>
+                <div class="sm:col-span-2">
+                  <label class="text-xs text-[#A6B0BF] block mb-1">Profesyonel Biyografi</label>
+                  <textarea id="editProfBio" rows="3" class="w-full ds-input"></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 10. MODÜL: HAKEDİŞ & ÖDEME DEFTERİ -->
+        <section id="tab-ledger" class="tab-content hidden max-w-5xl mx-auto space-y-5">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="ds-card p-4">
+              <div class="text-xs text-[#A6B0BF]">Toplam Tahakkuk</div>
+              <div id="ledgerTotal" class="text-lg font-semibold font-mono text-white mt-1">0 ₺</div>
+            </div>
+            <div class="ds-card p-4">
+              <div class="text-xs text-[#A6B0BF]">Ödenen Tutar</div>
+              <div id="ledgerPaid" class="text-lg font-semibold font-mono text-[#19C7B1] mt-1">0 ₺</div>
+            </div>
+            <div class="ds-card p-4">
+              <div class="text-xs text-[#A6B0BF]">Açık Bakiye (Borç)</div>
+              <div id="ledgerRemaining" class="text-lg font-semibold font-mono text-[#F04491] mt-1">0 ₺</div>
+            </div>
+          </div>
+
+          <div class="ds-card p-5 space-y-4">
+            <div class="flex flex-wrap justify-between items-center gap-2">
+              <div class="flex flex-wrap justify-between items-center gap-2">
+    <span class="text-xs font-semibold text-white">Yeni Hakediş / Ödeme Kaydı (İş Kalemini Serbestçe Yazabilirsiniz)</span>
+    <div class="flex items-center gap-3">
+        <span id="ledgerSyncLabel" class="text-xs text-[#19C7B1] font-mono">Bulut Senkronu Aktif</span>
+        <button type="button" onclick="exportLedgerToExcel()" class="ds-btn-secondary border-[#19C7B1] text-[#19C7B1]">
+            <i class="fa-solid fa-file-excel mr-1"></i> Excel'e Aktar
+        </button>
+    </div>
+</div>
+              <span id="ledgerSyncLabel" class="text-xs text-[#19C7B1] font-mono">Bulut Senkronu Aktif</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <input id="legName" type="text" placeholder="Taşeron / Usta / Firma Adı" class="ds-input" />
+              <div>
+                <input id="legJob" type="text" list="isKalemleriOneri" placeholder="İş Kalemi Yazın (Örn: Çelik Çatı, Hafriyat...)" class="w-full ds-input" />
+                <datalist id="isKalemleriOneri">
+                  <option value="Çelik Konstrüksiyon İmalatı"></option>
+                  <option value="Kalıp & Demir İşçiliği"></option>
+                  <option value="Hafriyat & Fore Kazık"></option>
+                  <option value="Beton & Pompa Hizmeti"></option>
+                  <option value="Mekanik & Elektrik Tesisat"></option>
+                  <option value="Cephe & Yalıtım"></option>
+                </datalist>
+              </div>
+              <input id="legAmount" type="number" placeholder="Tutar (₺)" class="ds-input font-mono" />
+              <button type="button" onclick="addLedgerItem()" class="ds-btn-primary">Kaydı İşle</button>
+            </div>
+            <div id="ledgerList" class="space-y-2 pt-2"></div>
+          </div>
+        </section>
+
+        <!-- 11. MODÜL: BETON & HAVA REHBERİ -->
+        <section id="tab-weather" class="tab-content hidden max-w-5xl mx-auto space-y-5">
+          <div class="ds-card p-5 space-y-5">
+            <div class="flex flex-wrap justify-between items-center gap-3 border-b border-[#262C36] pb-4">
+              <div>
+                <h3 class="text-sm font-semibold text-white">Saha Hava Koşulları ve Beton Kürleme Ön Tahmin Rehberi</h3>
+                <p id="weatherStatusText" class="text-xs text-[#A6B0BF] mt-0.5">Sıcaklık, nem ve rüzgar verilerine göre saha risk göstergeleri</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <select id="weatherCitySelect" onchange="fetchRealWeather()" class="ds-input py-1.5 text-xs">
+                  <option value="39.9208,32.8541,Ankara">Ankara (Canlı Uydu)</option>
+                  <option value="41.0082,28.9784,İstanbul">İstanbul (Canlı Uydu)</option>
+                  <option value="38.4237,27.1428,İzmir">İzmir (Canlı Uydu)</option>
+                  <option value="36.8969,30.7133,Antalya">Antalya (Canlı Uydu)</option>
+                </select>
+                <button type="button" onclick="fetchRealWeather()" class="ds-btn-secondary">Canlı Veriyi Çek</button>
+              </div>
+            </div>
+
+            <div id="weatherVisualAlertBanner" class="p-4 rounded-xl border border-[#19C7B1]/40 bg-[#19C7B1]/10 flex items-center justify-between gap-4">
+              <div class="flex items-center gap-3.5">
+                <div id="weatherAlertIcon" class="w-10 h-10 rounded-lg bg-[#19C7B1] text-[#091311] flex items-center justify-center text-lg font-bold">✓</div>
+                <div>
+                  <div id="pourVerdictBadge" class="text-sm font-bold text-white">BETON DÖKÜMÜNE UYGUN — STANDART SAHA KOŞULLARI</div>
+                  <div id="chefAdvice" class="text-xs text-[#A6B0BF] mt-0.5">Saha sıcaklığı ve bağıl nem standart döküm süreci için uygun aralıkta.</div>
+                </div>
+              </div>
+              <span id="weatherMaturityIndex" class="font-mono text-xs px-3 py-1.5 rounded-lg bg-[#101318] border border-[#262C36] text-[#19C7B1]">Reaksiyon: Normal</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div class="ds-panel p-4">
+                <div class="flex justify-between text-xs mb-2"><span class="text-[#A6B0BF]">Saha Sıcaklığı (-5°C / +42°C)</span><span id="tempLabel" class="font-mono font-bold text-white">18°C</span></div>
+                <input type="range" id="tempInput" min="-5" max="42" value="18" oninput="calculateCuring()" class="w-full accent-[#19C7B1]" />
+              </div>
+              <div class="ds-panel p-4">
+                <div class="flex justify-between text-xs mb-2"><span class="text-[#A6B0BF]">Bağıl Nem (%15 / %95)</span><span id="humLabel" class="font-mono font-bold text-white">%55</span></div>
+                <input type="range" id="humInput" min="15" max="95" value="55" oninput="calculateCuring()" class="w-full accent-[#19C7B1]" />
+              </div>
+              <div class="ds-panel p-4">
+                <div class="flex justify-between text-xs mb-2"><span class="text-[#A6B0BF]">Rüzgar Hızı (0 / 65 km/s)</span><span id="windLabel" class="font-mono font-bold text-white">14 km/s</span></div>
+                <input type="range" id="windInput" min="0" max="65" value="14" oninput="calculateCuring()" class="w-full accent-[#19C7B1]" />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div class="ds-panel p-4 space-y-2">
+                <div class="flex justify-between text-xs"><span class="text-[#A6B0BF]">Soğuk Hava / Don Riski</span><span id="frostRiskText" class="font-mono font-semibold text-[#19C7B1]">%0 (Düşük)</span></div>
+                <div class="w-full h-2 bg-[#101318] rounded-full overflow-hidden"><div id="frostRiskBar" class="h-full bg-[#19C7B1] transition-all" style="width: 5%"></div></div>
+                <div class="text-xs text-[#8E98A8]">Yaklaşık Priz Başlangıcı: <strong id="initialSetTime" class="text-white font-mono">~3.5 Saat</strong></div>
+              </div>
+
+              <div class="ds-panel p-4 space-y-2">
+                <div class="flex justify-between text-xs"><span class="text-[#A6B0BF]">Yüzey Buharlaşma / Rötre Riski</span><span id="shrinkRiskText" class="font-mono font-semibold text-[#19C7B1]">%15 (Düşük)</span></div>
+                <div class="w-full h-2 bg-[#101318] rounded-full overflow-hidden"><div id="shrinkRiskBar" class="h-full bg-[#19C7B1] transition-all" style="width: 15%"></div></div>
+                <div class="text-xs text-[#8E98A8]">Önerilen Kür Süresi (Tahmini): <strong id="cureDays" class="text-[#19C7B1] font-mono">~7 Gün</strong></div>
+              </div>
+
+              <div class="ds-panel p-4 space-y-2">
+                <div class="flex justify-between text-xs"><span class="text-[#A6B0BF]">Kule Vinç & Pompa Rüzgar Limiti</span><span id="craneRiskText" class="font-mono font-semibold text-[#19C7B1]">%28 (Normal)</span></div>
+                <div class="w-full h-2 bg-[#101318] rounded-full overflow-hidden"><div id="craneRiskBar" class="h-full bg-[#19C7B1] transition-all" style="width: 28%"></div></div>
+                <div class="text-xs text-[#8E98A8]">50 km/s üstünde vinç operasyonu durdurulmalıdır.</div>
+              </div>
+            </div>
+
+            <div>
+              <div class="text-xs font-semibold text-white mb-2.5">7 Günlük Saha Hava Tahmin Takvimi</div>
+              <div id="weeklyForecastGrid" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5 text-center text-xs"></div>
+            </div>
+
+            <div class="text-xs text-[#8E98A8] border-t border-[#262C36] pt-3">
+              <strong>Mühendislik Uyarısı:</strong> Bu ekran genel meteorolojik ön tahmin rehberidir; kalıp söküm kararı için laboratuvar basınç kırım testi ve şantiye şefi onayı gereklidir.
+            </div>
+          </div>
+        </section>
+
+        <!-- 12. MODÜL: EMSAL FİZİBİLİTE & ŞEREFİYE -->
+        <section id="tab-tools" class="tab-content hidden max-w-5xl mx-auto space-y-5">
+          <div class="ds-card p-5 space-y-4">
+            <h3 class="text-sm font-semibold text-white">Arsa Emsal (KAKS) ve Kat Karşılığı Fizibilite Hesaplayıcı</h3>
+            <div class="grid grid-cols-2 sm:grid-cols-6 gap-3">
+              <div><label class="text-xs text-[#A6B0BF] block mb-1">Arsa Alanı (m²)</label><input id="calcArsa" type="number" value="2000" oninput="runFeasibility()" class="w-full ds-input font-mono text-xs" /></div>
+              <div><label class="text-xs text-[#A6B0BF] block mb-1">Emsal (KAKS)</label><input id="calcEmsal" type="number" step="0.1" value="1.8" oninput="runFeasibility()" class="w-full ds-input font-mono text-xs" /></div>
+              <div><label class="text-xs text-[#A6B0BF] block mb-1">Emsal Harici Çarpan</label><input id="calcBonusFactor" type="number" step="0.05" value="1.30" oninput="runFeasibility()" class="w-full ds-input font-mono text-xs" /></div>
+              <div><label class="text-xs text-[#A6B0BF] block mb-1">Arsa Payı (%)</label><input id="calcPay" type="number" value="50" oninput="runFeasibility()" class="w-full ds-input font-mono text-xs" /></div>
+              <div><label class="text-xs text-[#A6B0BF] block mb-1">Ort. Daire (m²)</label><input id="calcDaireM2" type="number" value="120" oninput="runFeasibility()" class="w-full ds-input font-mono text-xs" /></div>
+              <div><label class="text-xs text-[#A6B0BF] block mb-1">Birim Maliyet ($/m²)</label><input id="calcCostPerM2" type="number" value="650" oninput="runFeasibility()" class="w-full ds-input font-mono text-xs" /></div>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+              <div class="ds-panel p-3.5"><div class="text-xs text-[#A6B0BF]">Toplam İnşaat Alanı</div><div id="resTotalM2" class="text-sm font-semibold font-mono text-white mt-1">4.680 m²</div></div>
+              <div class="ds-panel p-3.5"><div class="text-xs text-[#A6B0BF]">Üretilebilir Bağımsız Bölüm</div><div id="resTotalFlats" class="text-sm font-semibold font-mono text-[#19C7B1] mt-1">30 Daire</div></div>
+              <div class="ds-panel p-3.5"><div class="text-xs text-[#A6B0BF]">Paylaşım (Geliştirici / Arsa)</div><div id="resSplit" class="text-sm font-semibold font-mono text-white mt-1">15 / 15</div></div>
+              <div class="ds-panel p-3.5"><div class="text-xs text-[#A6B0BF]">Tahmini İnşaat Maliyeti</div><div id="resCost" class="text-sm font-semibold font-mono text-white mt-1">...</div></div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              <!-- Sol Taraf: Pusula -->
+              <div class="lg:col-span-5 ds-card p-5 space-y-4">
+                <h3 class="text-sm font-semibold text-white">Cephe Yönelimi ve Şerefiye</h3>
+                <div class="flex flex-col items-center gap-4">
+                  <div class="w-24 h-24 rounded-full border border-[#262C36] bg-[#101318] flex items-center justify-center relative">
+                    <div id="compassNeedle" class="w-1 h-16 bg-[#19C7B1] rounded-full transition-transform"></div>
+                  </div>
+                  <div class="w-full space-y-2 text-center">
+                    <input id="degreeSlider" type="range" min="0" max="359" value="135" oninput="updateCompass()" class="w-full accent-[#19C7B1]" />
+                    <div id="degreeTitle" class="text-sm font-semibold font-mono text-white">135° — Güneydoğu (+%15 Şerefiye)</div>
+                    <div id="serefiyeAdvice" class="text-xs text-[#A6B0BF]">Sabah ve öğle güneşini doğrudan alır.</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Sağ Taraf: AI Asistan -->
+              <div class="lg:col-span-7 ds-card p-5 flex flex-col">
+                <div class="flex items-center justify-between mb-3 border-b border-[#262C36] pb-3">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-[#19C7B1]/20 flex items-center justify-center text-[#19C7B1]"><i class="fa-solid fa-robot"></i></div>
+                        <div>
+                            <h3 class="text-sm font-semibold text-white">PropTech AI Analiz Asistanı</h3>
+                            <p class="text-[11px] text-[#A6B0BF]">Değerleme ve yatırım potansiyeli ön görüsü</p>
+                        </div>
+                    </div>
+                    <button type="button" onclick="generateAIFeasibilityReport()" class="ds-btn-primary py-1.5 px-3">
+                        <i class="fa-solid fa-bolt mr-1"></i> Rapor Üret
+                    </button>
+                </div>
+                
+                <div id="aiReportContainer" class="flex-1 rounded-lg bg-[#101318] border border-[#262C36] p-4 text-xs text-[#A6B0BF] overflow-y-auto max-h-48 relative">
+                    <div class="absolute inset-0 flex items-center justify-center flex-col gap-2 opacity-50">
+                        <i class="fa-solid fa-wand-magic-sparkles text-2xl text-[#8E98A8]"></i>
+                        <span>Fizibilite parametrelerini girip rapor üretin...</span>
+                    </div>
+                </div>
+              </div>
+          </div>
+        </section>
+
+        <!-- 13. MODÜL: GERÇEK BULUT SOS VE 112 ACİL ÇAĞRI UYARISI -->
+        <section id="tab-emergency" class="tab-content hidden max-w-2xl mx-auto">
+          <div class="ds-card p-6 border-[#F04491]/50 space-y-4">
+            <div class="p-3.5 rounded-lg bg-[#F04491]/15 border border-[#F04491]/40 text-xs text-white font-medium">
+              ⚠️ <strong>HAYATİ UYARI:</strong> Bu buton yalnızca aktif şantiye odasına uygulama içi mesaj bırakır; resmi acil servislerle bağlantılı değildir. Hayati tehlike ve iş kazalarında <strong>derhal 112 Acil Çağrı Merkezini</strong> arayın!
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 class="text-sm font-semibold text-[#F04491]">İSG Acil Durum ve Saha Tahliye Bildirimi</h3>
+                <p class="text-xs text-[#A6B0BF] mt-0.5">Aktif şantiye odası sohbetine GPS koordinatlı acil durum kaydı ekler.</p>
+              </div>
+              <div class="flex gap-2">
+                <a href="tel:112" class="ds-btn-action font-bold">📞 112'Yİ ARA</a>
+                <button type="button" onclick="triggerSOS('ACİL SAHA TAHLİYE VE İSG UYARISI')" class="ds-btn-secondary border-[#F04491] text-[#F04491]">Odaya SOS Yaz</button>
+              </div>
+            </div>
+            <div id="sosAlertBox" class="hidden p-3.5 rounded-lg bg-[#1C222B] border border-[#262C36] text-xs text-white">
+              <div id="sosAlertTitle" class="font-semibold text-[#19C7B1]"></div>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- PROFİL DETAY & GÜVENİRLİK PUANLAMA MODALI -->
+  <div id="profileModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="max-w-md w-full ds-card overflow-hidden shadow-2xl">
+      <div class="h-16 bg-[#1C222B] border-b border-[#262C36] flex justify-end p-3">
+        <button type="button" onclick="closeProfileModal()" class="text-[#A6B0BF] hover:text-white text-xs">✕</button>
+      </div>
+      <div class="px-6 pb-6">
+        <div class="flex justify-between items-end -mt-8 mb-3">
+          <div id="profAvatar" class="w-16 h-16 rounded-xl bg-[#101318] border border-[#262C36] flex items-center justify-center font-semibold text-base text-[#19C7B1] overflow-hidden"></div>
+          <div id="profActionButtons" class="flex gap-2">
+            <button type="button" id="profFollowBtn" onclick="toggleFollowFromModal()" class="ds-btn-secondary"></button>
+            <button type="button" onclick="startDmFromProfile()" class="ds-btn-primary">Mesaj Gönder</button>
+          </div>
+        </div>
+        <h3 id="profName" class="text-sm font-semibold text-white"></h3>
+        <div id="profCert" class="text-xs text-[#A6B0BF] font-mono mt-0.5"></div>
+        <p id="profBio" class="text-xs text-[#A6B0BF] mt-2 leading-relaxed"></p>
+
+        <div class="grid grid-cols-2 gap-2 mt-4 p-3 rounded-lg bg-[#101318] border border-[#262C36] text-xs">
+          <div>
+            <span class="text-[#8E98A8] block text-[11px]">Güvenirlik Puanı</span>
+            <span id="profTrust" class="font-semibold text-amber-400 font-mono">★ 5.0</span>
+          </div>
+          <div>
+            <span class="text-[#8E98A8] block text-[11px]">Uzmanlık Bölgesi</span>
+            <span id="profCity" class="font-medium text-white">Türkiye</span>
+          </div>
+        </div>
+
+        <div id="profRatingSection" class="mt-3 p-3 rounded-lg bg-[#1C222B] border border-[#262C36] space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-[#A6B0BF] font-medium">Bu Uzmanın Güvenirliğini Puanla:</span>
+            <div class="flex gap-1" id="profStarButtons">
+              <button type="button" onclick="rateUserReliability(1)" class="px-2 py-0.5 rounded bg-[#101318] hover:bg-amber-400 hover:text-black text-amber-400 font-mono text-xs">1★</button>
+              <button type="button" onclick="rateUserReliability(2)" class="px-2 py-0.5 rounded bg-[#101318] hover:bg-amber-400 hover:text-black text-amber-400 font-mono text-xs">2★</button>
+              <button type="button" onclick="rateUserReliability(3)" class="px-2 py-0.5 rounded bg-[#101318] hover:bg-amber-400 hover:text-black text-amber-400 font-mono text-xs">3★</button>
+              <button type="button" onclick="rateUserReliability(4)" class="px-2 py-0.5 rounded bg-[#101318] hover:bg-amber-400 hover:text-black text-amber-400 font-mono text-xs">4★</button>
+              <button type="button" onclick="rateUserReliability(5)" class="px-2 py-0.5 rounded bg-[#101318] hover:bg-amber-400 hover:text-black text-amber-400 font-mono text-xs">5★</button>
+            </div>
+          </div>
+          <div id="profRatingFeedback" class="hidden text-xs text-[#19C7B1]">Puanınız kaydedildi.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script src="js/config.js"></script>
+<script src="js/firebase.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/rooms.js"></script>
+<script src="js/feed.js"></script>
+<script src="js/dm.js"></script>
+<script src="js/harita.js"></script>
+<script src="js/modules.js"></script>
+</body>
+</html>

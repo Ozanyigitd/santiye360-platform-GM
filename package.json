@@ -1,0 +1,31 @@
+{
+  "name": "benim-uygulamam",
+  "version": "1.0.0",
+  "description": "Windows masaustu uygulamam",
+  "author": "Ozan",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "make": "electron-forge make"
+  },
+  "devDependencies": {
+    "electron": "*",
+    "@electron-forge/cli": "*",
+    "@electron-forge/maker-squirrel": "*"
+  },
+  "config": {
+    "forge": {
+      "packagerConfig": {
+        "name": "BenimUygulamam"
+      },
+      "makers": [
+        {
+          "name": "@electron-forge/maker-squirrel",
+          "config": {
+            "name": "benim_uygulamam"
+          }
+        }
+      ]
+    }
+  }
+}
