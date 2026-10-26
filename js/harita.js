@@ -90,8 +90,9 @@ function haritaBaslat() {
         attribution: '&copy; OpenStreetMap, &copy; CARTO'
     });
     
-    satelliteLayer = window.L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+    satelliteLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+        attribution: 'Google Satellite',
+        maxZoom: 20
     });
 
     streetLayer.addTo(myMap);
