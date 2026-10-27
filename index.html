@@ -550,8 +550,20 @@
                   <div id="haritaPinListesiKutu" class="space-y-2 max-h-96 overflow-y-auto pr-1"></div>
                 </div>
                 <div class="text-xs text-[#8E98A8] pt-3 border-t border-[#262C36]">
-                  Her raptiyeyi çöp kutusu ikonundan veya harita balonundan silebilirsiniz.
-                </div>
+    Her raptiyeyi çöp kutusu ikonundan veya harita balonundan silebilirsiniz.
+</div>
+
+<!-- Resmi Gazete Canlı Akış Kutusu -->
+<div class="bg-[#1C222B] border border-[#262C36] rounded-xl p-4 mt-4">
+    <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-semibold text-white">Resmî Gazete İlanları</h3>
+        <span class="bg-[#19C7B1]/10 text-[#19C7B1] text-[10px] px-2 py-1 rounded-full animate-pulse">Canlı</span>
+    </div>
+    
+    <div id="resmiGazeteHaberleri" class="h-[250px] overflow-y-auto pr-2 custom-scrollbar">
+        <div class="text-xs text-[#8E98A8] p-3 text-center animate-pulse">Haberler yükleniyor...</div>
+    </div>
+</div>
               </div>
             </div>
           </div>
@@ -1086,6 +1098,7 @@
 <script src="js/dm.js"></script>
 <script src="js/harita.js"></script>
 <script src="js/modules.js"></script>
+<script src="js/resmigazete.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 </body>
 </html>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
